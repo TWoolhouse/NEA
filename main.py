@@ -1,36 +1,41 @@
 import sys
 import server
 import client
+import argparse
+from interface import Interface
 
-dargs = {
-    "-s": [False],
-    "-a": ["127.0.0.1"],
-    "--fps": [False],
-}
+def parser():
+    parser_main = argparse.ArgumentParser(description="Game Library Player")
 
-def log(func):
-    def log(*args, **kwargs):
-        res = func(*args, **kwargs)
-        print(func.__name__, args, kwargs, res)
-        return res
-    return log
+    parser_optional = parser_main._action_groups.pop()
+    parser_network = parser_main.add_argument_group('Network')
+    parser_server = parser_main.add_argument_group('Server')
+    parser_main._action_groups.append(parser_optional)
 
-def get_arg(parameter, l=1):
-    try:
-        index = sys.argv.index(parameter)
-    except ValueError:
-        return False
-    try:
-        return [sys.argv[index + i] for i in range(l + 1)]
-    except IndexError:
-        return False
+    parser_network.add_argument("-a", "--addr", dest="addr", type=str,
+        help="IPv4 Address Override Settings")
+    parser_network.add_argument("-p", "--port", dest="port", type=int,
+        help="Port Number Override Settings")
+    parser_network.add_argument("-w", "--web", dest="port", type=int,
+        help="Webserver Port Number Override Settings")
+    parser_server.add_argument("-s", "--server", dest="server", action="store_true",
+        help="Host a Server Instance")
+    parser_server.add_argument("--repop", dest="repopulate", action="store_true",
+        help="Regenerate the Database")
+    parser_server.add_argument("--headless", dest="no_client", action="store_true",
+        help="Run without Client")
+    return parser_main
 
-def arg(param: str):
-    if param in dargs:
-        a = a if (a := get_arg(param, l=len(dargs[param])-1)) else dargs[param]
-        return a[0] if len(a) == 1 else a[1:]
+def main():
+    args = parser().parse_args(["-h"])
+    print(args)
+    if args.server:
+        Interface.schedule(server.main(args.repopulate))
+        if args.no_client:
+            return
+    client.main()
+    # Interface.main()
 
-if arg("-s"):
-    server.main(repopulate=bool(arg("--repop")))
-else:
-    client.main(arg("-a"))
+if __name__ == "__main__":
+    with Interface.main_thread():
+        main()

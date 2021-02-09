@@ -138,8 +138,8 @@ class Ball(engine.component.Script):
     def reset(self, side: int=None):
         self.transform.position = engine.Vector(Game.width, Game.height) // 2
         side = side if isinstance(side, int) else random.randint(0, 1)
-        # theta = random.randint(7, 30) * (random.randint(0, 1) * 2 - 1)
-        theta = 0
+        theta = random.randint(7, 30) * (random.randint(0, 1) * 2 - 1)
+        # theta = 0
         self.velocity = engine.Vector(side * 2 - 1, 0).rotate(theta) * self.SPEED
         self.speed = 0
 

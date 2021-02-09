@@ -255,7 +255,7 @@ class PlayerControllerInput(engine.component.Script):
 
 class PlayerControllerAI(engine.component.Script):
 
-    # HEIGHT = 
+    # HEIGHT =
     __height = (ObstacleManager.AREA // ObstacleManager.WIDTH[1], ObstacleManager.AREA // ObstacleManager.WIDTH[0])
 
     def __init__(self, manager: StateManager):
@@ -358,7 +358,7 @@ class Application(Game):
         )
 
         engine.instantiate( # Player
-            # PlayerControllerInput(),
+            PlayerControllerInput(),
             PlayerControllerAI(manager),
             PlayerController(manager),
             PhysBody(0.06),

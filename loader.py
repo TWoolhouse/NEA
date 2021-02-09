@@ -1,6 +1,6 @@
 import os
+import caching
 import importlib
-from single import Singleton
 from path import PATH
 
 FILE = "game.py"
@@ -17,10 +17,10 @@ def validate(module) -> bool:
         return True
     return False
 
-class Module:
+class GameSet:
     def __init__(self):
-        self.names = ["None"]
-        self._active = 0
+        self.names = set()
+        self.active: str = None
         self._module = new()
         self.reload()
 
@@ -36,27 +36,24 @@ class Module:
     def get(self):
         return self._module
 
-    def active(self) -> str:
-        self.names[self._active]
-
     def valid(self) -> bool:
         return self._valid
 
 def read(filename: str) -> bytes:
-    with open(filename, "rb") as file:
-        return file.read(DIRP+filename)
+    with open(DIRP+filename+"/main.py", "rb") as file:
+        return file.read()
 
 def write(data: bytes):
     with open(DIRP+FILE, "wb") as file:
         file.write(data)
 
+@caching.cache(1)
 def find_file(name: str) -> str:
-    filename = "g_{}.py".format(name)
-    if filename in os.listdir(DIRP):
+    filename = "g_{}".format(name)
+    if filename in os.listdir(DIRP) and "main.py" in os.listdir(DIRP+filename):
         return filename
     return False
 
-def list_avalible() -> str:
-    for filename in os.listdir(DIRP):
-        if filename.startswith("g_") and filename.endswith(".py"):
-            yield filename
+@caching.cache(1)
+def list_avalible() -> list[str]:
+    return [filename[2:] for filename in os.listdir(DIRP) if filename.startswith("g_")]

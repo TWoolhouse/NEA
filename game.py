@@ -1,6 +1,6 @@
+import time
 import engine
 import multiprocessing as mp
-import time
 
 class Game: # Subclass for each game
 

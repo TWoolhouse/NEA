@@ -8,29 +8,29 @@ __all__ = ["Database"]
 class Database(metaclass=Singleton):
 
     def __init__(self):
-        self.__db = db.ThreadDatabase(PATH+"database")
+        self._db = db.DatabaseAsync(PATH+"database.db")
 
     def new(self):
-        self.__db.new()
+        self._db.new()
 
-    def repopulate(self):
-        game = self.__db.table("Game", db.Column("name", db.Type.String, db.Type.NotNull), db.Column("file", db.Type.String, db.Type.NotNull))
-        user = self.__db.table("User", db.Column("name", db.Type.String, db.Type.NotNull), db.Column("password", db.Type.String, db.Type.NotNull))
+    async def repopulate(self):
+        game = await self._db.table("Game", db.Column("name", db.Type.STR, db.Type.NULL), db.Column("file", db.Type.STR, db.Type.NULL))
+        user = await self._db.table("User", db.Column("name", db.Type.STR, db.Type.NULL), db.Column("password", db.Type.STR, db.Type.NULL))
 
         # Default Users
-        self.__db.insert(user, "admin", "password")
+        await self._db().insert(user, "admin", "password")
 
         # Games
-        self.__db.insert(game, "Pong", "g_pong.py")
+        await self._db().insert(game, "Pong", "g_pong.py")
 
-    def __enter__(self):
-        self.__db.open()
+    async def __aenter__(self):
+        await self._db.__aenter__()
         return self
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.__db.close()
+    async def __aexit__(self, *args):
+        return await self._db.__aexit__(*args)
 
     def login(self, username: str, password: str) -> int:
-        return self.__db.selectID(self.__db["User"], db.Condition(username), db.Condition(password))
+        return self._db.selectID(self._db["User"], db.Condition(username), db.Condition(password))
 
-    def register(self, username: str, password: str) -> int:
-        return self.__db.insert(self.__db["User"], username, password, id=True)
+    async def register(self, username: str, password: str) -> int:
+        return await self._db().insert(self._db["User"], username, password)

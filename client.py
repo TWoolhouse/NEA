@@ -6,6 +6,7 @@ import asyio
 import loader
 import caching
 import functools
+import webbrowser
 from interface import Interface
 from typing import Callable, Any
 
@@ -86,7 +87,9 @@ class PageGame(AppPage):
                 self.remove(name)
 
         for row, name in enumerate(sorted(self.app.client.games.names), start=3):
-            self.add(gui.tk.Button(self, text=name.title(), command=gui.cmd(self.app.window["load_game"].load, name)), f"g_{name}", row=row, column=1, pady=2)
+            wgt = self.add(gui.tk.Button(self, text=name.title(), command=gui.cmd(self.app.window["load_game"].load, name)), f"g_{name}", row=row, column=1, pady=2)
+            if self.app.client._active.is_set():
+                wgt["state"] = "disabled"
 
     def play_game(self):
         self.edit("current", "state", "disabled")
@@ -130,8 +133,9 @@ class PageLoadGame(AppPage):
 class PageSetting(AppPage):
     def setup(self):
         self.add(gui.tk.Label(self, text="Settings"), row=1, column=1, pady=15)
-        self.add(gui.tk.Label(self, text="None"), "server", row=2, column=1)
-        self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("home")), row=99, column=1)
+        self.add(gui.tk.Button(self, text="Register Account", command=lambda: webbrowser.open_new_tab(f"http://{self.app.client.net.addr}:{self.app.client.net.port + 1}/register")), row=2, column=1)
+        self.add(gui.tk.Label(self, text="None"), "server", row=3, column=1)
+        self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("home")), row=99, column=1, pady=15)
 
     def show(self):
         self.edit("server", "text", "Server: " + (self.app.client.net.addr if self.app.client.net else "Disconnected"))
@@ -153,7 +157,7 @@ class Client:
             Interface.schedule(self.net.close())
 
     @caching.cache(1, 5)
-    async def _retrieve_list(self) :
+    async def _retrieve_list(self):
         names = await self.net.retrieve_list()
         self.games.names.clear()
         self.games.names.update(names)

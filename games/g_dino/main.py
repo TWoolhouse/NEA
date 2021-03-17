@@ -95,12 +95,14 @@ class StateManager(engine.component.Script):
                 self.reset()
                 self.state = self.GameState.UNPAUSE
 
+@engine.ecs.require(engine.component.Collider)
 class Obstacle(engine.ecs.Component):
 
     def initialize(self):
         self.transform = self.Get(engine.component.Transform)
         self.collider = self.Get(engine.component.Collider)
 
+@engine.ecs.require(StateManager)
 class ObstacleManager(engine.component.Script):
 
     LIMIT = 10
@@ -118,12 +120,17 @@ class ObstacleManager(engine.component.Script):
         self.vel = engine.Vector(-self.SPEED, 0)
         self.speed = 1
         self.dist = 0
-        self.reset()
-        self.add()
+
+        self._colour_array = [(1,0,0), (1,.75,0), (0,1,0), (0,.5,.5), (0,0,1), (.5,0,.5)]
+        self._colour_count = 0
 
     def initialize(self):
         super().initialize()
         self.state = self.Get(StateManager)
+        self._colour_array = [engine.render.Colour(*c) for c in self._colour_array]
+
+        self.reset()
+        self.add()
 
     def collide(self):
         self.vel = engine.Vector(0, 0)
@@ -134,6 +141,7 @@ class ObstacleManager(engine.component.Script):
         self.dist = 0
         for i in range(len(self.children)):
             self.remove()
+        self._colour_count = 0
 
     def update(self):
         self.speed += self.RATE * engine.core.DeltaTime.dt()
@@ -160,11 +168,14 @@ class ObstacleManager(engine.component.Script):
         dim = engine.Vector(width, self.AREA // width)
         engine.instantiate(
             obstacle,
-            engine.component.Collider(engine.physics.collider.Rectangle, engine.component.Transform(scl=dim), 2),
-            engine.component.Render(engine.render.Polygon.Quad(*dim)),
+            engine.component.Collider(engine.physics.collider.Rectangle, engine.component.Transform(scl=dim), "Obstacle"),
+            engine.component.Render(engine.render.Polygon.Quad(*dim, col=self._colour_array[self._colour_count % len(self._colour_array)])),
             transform=engine.component.Transform(engine.Vector(self._spawn, FLOOR - 2 - dim[1] // 2))
         )
         self.children.append(obstacle)
+        self._colour_count += 1
+
+engine.ecs.require(ObstacleManager)(StateManager)
 
 class PhysBody(engine.ecs.Component):
 
@@ -191,6 +202,7 @@ class PhysBodySystem(engine.ecs.System):
             component.velocity += adt
             component.acceleration = self.GRAVITY
 
+@engine.ecs.require(PhysBody, engine.component.Collider)
 class PlayerController(engine.component.Script):
 
     def __init__(self, manager: StateManager):
@@ -198,6 +210,7 @@ class PlayerController(engine.component.Script):
         self._fall = False
         self.floor = False
         self.manager = manager
+        self.layers: engine.layer.Type = engine.app().setting.collision().layers
 
     def initialize(self):
         super().initialize()
@@ -207,12 +220,12 @@ class PlayerController(engine.component.Script):
 
     def update(self):
         collisions = {l for c in self.collider.collision for l in c.layers}
-        if 1 in collisions:
+        if self.layers["Enviroment"] in collisions:
             self.floor = True
         else:
             self.floor = False
 
-        if 2 in collisions:
+        if self.layers["Obstacle"] in collisions:
             self.manager.collide()
             try:
                 self.Get(PlayerControllerAI).fail()
@@ -239,6 +252,7 @@ class PlayerController(engine.component.Script):
     def fall(self):
         self._fall = True
 
+@engine.ecs.require(PlayerController)
 class PlayerControllerInput(engine.component.Script):
     def __init__(self):
         self.key_up, self.key_dn = engine.input.Key.W, engine.input.Key.S
@@ -253,6 +267,7 @@ class PlayerControllerInput(engine.component.Script):
         if engine.input.key(self.key_dn):
             self.controller.fall()
 
+@engine.ecs.require(PlayerController)
 class PlayerControllerAI(engine.component.Script):
 
     # HEIGHT =
@@ -291,21 +306,6 @@ class PlayerControllerAI(engine.component.Script):
         pass
 
     def update(self):
-        # data = [
-        #     neural.maths.constrain(len(self.manager.obstacle.children), 0, ObstacleManager.LIMIT),
-        #     neural.maths.constrain(self.controller.transform.position[1], 0, Game.height),
-        #     # self.controller.body.velocity[1],
-        # ]
-        # for i in range(3):
-        #     try:
-        #         child = self.manager.obstacle.children[0]
-        #     except IndexError:
-        #         data.extend((1, 0, 0))
-        #         continue
-        #     data.append(neural.maths.constrain(child.transform.position[0], ObstacleManager._offset, ObstacleManager._spawn))
-        #     sx, sy = child.collider.transform.scale
-        #     data.append(neural.maths.constrain(sx, ObstacleManager.WIDTH[0], ObstacleManager.WIDTH[1]))
-        #     data.append(neural.maths.constrain(sy, self.__height[0], self.__height[1]))
         data = []
         try:
             child = self.manager.obstacle.children[0]
@@ -345,10 +345,19 @@ class Application(Game):
         app.window._master.title(f"Dino-{app.program.game.id}-0")
         app.world.system(engine.ecs.systems.Render, RENDER)
         app.world.add_system(PhysBodySystem(), "PHYSICS")
+        app.world.add_system(engine.ecs.systems.FPS(), "POST")
 
-        app.setting.collision().update({
-            0: {1, 2}, # Player
-        })
+        setting_collision = app.setting.collision()
+        setting_collision.matrix.make(
+            setting_collision.layers.set("Player", 10),
+            setting_collision.layers.set("Enviroment", 11),
+            setting_collision.layers.set("Obstacle", 12),
+        )
+        setting_collision.matrix.compile()
+
+        setting_render = app.setting.render()
+        setting_render.layers["Player"] = 110
+        setting_render.compile()
 
         manager = StateManager()
         engine.instantiate(
@@ -362,15 +371,21 @@ class Application(Game):
             PlayerControllerAI(manager),
             PlayerController(manager),
             PhysBody(0.06),
-            engine.component.Collider(engine.physics.collider.Rectangle, engine.component.Transform(scl=engine.Vector(50, 100)), 0),
-            engine.component.Render(engine.render.Polygon.Quad(50, 100)),
+            engine.component.Collider(engine.physics.collider.Rectangle, engine.component.Transform(scl=engine.Vector(50, 100)), "Player"),
+            engine.component.Render(engine.render.Polygon.Quad(50, 100), layer="Player"),
             transform=engine.component.Transform(engine.Vector(Game.width // 16, Game.height // 2))
         )
 
         engine.instantiate( # Floor
-            engine.component.Collider(engine.physics.collider.Rectangle, engine.component.Transform(scl=engine.Vector(Game.width, 20)), 1),
+            engine.component.Collider(engine.physics.collider.Rectangle, engine.component.Transform(scl=engine.Vector(Game.width, 20)), "Enviroment"),
             engine.component.Render(engine.render.Polygon.Quad(Game.width, 20)),
             transform=engine.component.Transform(engine.Vector(Game.width // 2, FLOOR + 10))
+        )
+
+        engine.instantiate( # FPS
+            engine.component.FPS(),
+            engine.component.Render(engine.render.Text("FPS"), True),
+            transform=engine.component.Transform(engine.Vector(Game.width - 20, 8))
         )
 
     def close_event(self, event: engine.event.KeyPress):

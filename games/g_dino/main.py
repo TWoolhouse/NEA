@@ -284,33 +284,38 @@ class PlayerControllerAI(engine.component.Script):
         engine.app().window.title(f"Dinosaur - {self.iteration}")
 
     def terminate(self):
+        app = engine.app()
+        if app.program.AIState is not app.program.AIState.TRAIN:
+            return
         if self.iteration < engine.app().program.iterations:
             engine.app().program.fitness = None
         else:
             engine.app().program.fitness = self.score / self.iteration
 
     def update(self):
-        height = neural.maths.constrain(self.controller.transform.position_global[1], FLOOR, 0)
-        data = [height] * 5
+        # height = neural.maths.constrain(self.controller.transform.position_global[1], FLOOR, 0)
+        data = [1] * 2
         # data[1] = neural.maths.constrain(self.manager.obstacle.speed, 1, 100)
         for i in range(2):
             try:
                 child = self.manager.obstacle.children[i]
-                data[2*i+1] = neural.maths.constrain(child.transform.position[i], ObstacleManager._offset, ObstacleManager._spawn)
-                data[2*i+2] = child.height // self.manager.obstacle.HEIGHT
-            except IndexError:
-                data[2*i+1] = 1
-                data[2*i+2] = 0
+                data[i] = neural.maths.constrain(child.transform.position[i], ObstacleManager._offset, ObstacleManager._spawn)
+                # data[2*i+1] = child.height // self.manager.obstacle.HEIGHT
+            except IndexError:    pass
+                # data[i] = 1
+                # data[2*i+2] = 0
         out = self.network.feed(*data)
         self.manager._text_net_out.text = out
-        self.network.result(out, self.controller.jump, self.controller.fall)
+        self.network.result(out, self.controller.fall, self.controller.jump)
         self.manager._text_net.text = out.index(max(out))
 
     def fail(self):
         if self.manager.state is self.manager.GameState.PAUSE:
+            app = engine.app()
+            if app.program.AIState is not app.program.AIState.TRAIN:
+                return
             self.iteration += 1
             self.score += self.manager.score
-            app = engine.app()
             app.window.title(f"Dinosaur - {self.iteration}")
             if self.iteration >= app.program.iterations:
                 return app.event(engine.event.KeyPress(engine.input.Key.ESCAPE))

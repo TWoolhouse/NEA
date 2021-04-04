@@ -9,23 +9,39 @@ class SClient(node.SClient):
 
     async def open(self):
         await super().open()
+        self.db: db.Database = self.server.database
         print("Connection:", self._node)
-
-    async def dsptch_glist(self, data: node.Data):
-        print("Request Game List")
-        glist = loader.list_avalible()
-        print(glist)
-        self.send(len(glist), "GLIST")
-        for element in glist:
-            self.send(element, node.Tag("GLIST"))
 
     async def dsptch_game(self, data: node.Data):
         print("Game Request:", data.data)
-        if filename := loader.find_file(data.data):
-            print("Game File:", data.data)
-            return self.send(loader.read(filename), "GAME")
+        if game := await self.db.game(data.data):
+            print("Game File:", data.data, game[0])
+            return self.send(loader.read_game(game[1]), "GAME", node.Tag(data.data))
         print("Game Not Found:", data.data)
-        return self.send(False, "GAME")
+        return self.send(False, "GAME", node.Tag(data.data))
+
+    async def dsptch_glist(self, data: node.Data):
+        print("Request Game List")
+        glist = await self.db.game_list()
+        self.send(len(glist), "GLIST")
+        for element in glist:
+            self.send(tuple(element), "GLIST")
+
+    async def dsptch_ailist(self, data: node.Data):
+        print("Request AI List", data.data)
+        ailist = await self.db.ai_list(data.data)
+        tag = node.Tag(data.data)
+        self.send(len(ailist), "AILIST", tag)
+        for element in ailist:
+            self.send(tuple(element), "AILIST", tag)
+
+    async def dsptch_ai(self, data: node.Data):
+        print("AI Request:", data.data)
+        if ai := await self.db.ai(data.data):
+            _, filename = await self.db.ai_game(data.data)
+            ai_data = loader.read_ai(filename, ai[1])
+            return self.send(ai_data, "AI", node.Tag(data.data))
+        return self.send(False, "AI", node.Tag(data.data))
 
     async def dsptch_database(node: 'node.DataInterface', data: node.Data):
         print("Database Request", data)
@@ -37,7 +53,7 @@ class CSStyle(website.Request):
         await self.load_style("/".join(self.request[1:]))
 
     async def load_style(self, filename: str):
-        data = await website.buffer.File(website.path+"web/style/"+filename).compile()
+        data = await website.buffer.File(website.path+"resource/style/"+filename).compile()
         if data.startswith(b"# meta"):
             lines = data.splitlines(False)[1:]
             for index, fname in enumerate(lines, start=1):
@@ -58,6 +74,7 @@ class Server(node.Server):
         end = asyncio.Event()
 
         async def handle(self):
+            print(f"{self.client.peer}:{self.client.port} /{'/'.join(self.request)}")
             await self.tree.traverse(self)
 
         def kill(self):

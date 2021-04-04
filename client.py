@@ -15,21 +15,39 @@ class Requests(node.Client):
         super().__init__(addr, port)
 
     @caching.cache(1, 5)
-    async def download(self, name: str):
-        print("Download:", name)
-        self.send(name, "GAME")
-        data = await self.recv("GAME")
+    async def download(self, game: int):
+        print("Download:", game)
+        self.send(game, "GAME")
+        data = await self.recv("GAME", node.Tag(game))
         if data and data[0].data:
-            loader.write(data[0].data)
+            loader.write_game(data[0].data)
             return True
         return False
 
     @caching.cache(1, 5)
-    async def retrieve_list(self):
+    async def download_ai(self, ai: int) -> bytes:
+        print("Download AI:", ai)
+        self.send(ai, "AI")
+        data = await self.recv("AI", node.Tag(ai))
+        if data and data[0].data:
+            return data[0].data
+        return False
+
+    @caching.cache(1, 5)
+    async def retrieve_list(self) -> list[tuple[int, str]]:
         print("Retrieve List")
         self.send(b"", "GLIST")
-        return [i.data for i in await self.recv(node.Tag("GLIST"), wait=(await self.recv("GLIST"))[0].data)]
+        count = await self.recv("GLIST")
+        if count:
+            return [i.data for i in await self.recv("GLIST", wait=count[0].data)]
 
+    @caching.cache(1, 15)
+    async def retrieve_net_list(self, game: int) -> list[tuple[int, str]]:
+        print("Retrieve AI List")
+        self.send(game, "AILIST")
+        count = await self.recv("AILIST", node.Tag(game))
+        if count:
+            return [i.data for i in await self.recv("AILIST", node.Tag(game), wait=count[0].data)]
 
 class GuiApplication:
 
@@ -86,8 +104,8 @@ class PageGame(AppPage):
             if name.startswith("g_"):
                 self.remove(name)
 
-        for row, name in enumerate(sorted(self.app.client.games.names), start=3):
-            wgt = self.add(gui.tk.Button(self, text=name.title(), command=gui.cmd(self.app.window["load_game"].load, name)), f"g_{name}", row=row, column=1, pady=2)
+        for row, game in enumerate(sorted(self.app.client.games.names.items()), start=3):
+            wgt = self.add(gui.tk.Button(self, text=game[1].title(), command=gui.cmd(self.app.window["load_game"].load, *game)), f"g_{game[0]}", row=row, column=1, pady=2)
             if self.app.client._active.is_set():
                 wgt["state"] = "disabled"
 
@@ -108,33 +126,69 @@ class PageGame(AppPage):
 
 class PageLoadGame(AppPage):
     def setup(self):
+        self.game_id = None
         self.game_name = "None"
+        self.net_name = gui.tk.IntVar()
         self.add(gui.tk.Label(self, text="GAME NAME"), "game_name", row=1, column=1, pady=10)
-        self.add(gui.tk.Button(self, text="Download", command=self.load_game), "download", row=2, column=1, pady=5)
+        self.add(gui.tk.Label(self, text="Loading AIs"), "loading", row=2, column=1, pady=5)
+        self.add(gui.tk.Radiobutton(self, text="NETWORK NAME", variable=self.net_name, value=0), "net_name_2", row=2, column=1, pady=2)
+        self.add(gui.tk.Button(self, text="Download", command=self.load_game), "download", row=98, column=1, pady=5)
         self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("games")), row=99, column=1, pady=15)
 
-    def load(self, name: str):
-        self.edit("game_name", "text", name.title())
+    def load(self, gid: int, name: str):
+        print(self.app.client.net._node)
+        if not self.app.client.net:
+            print("SHOW SETTINGS")
+            return self.show_page("settings")
+        self.game_id = gid
         self.game_name = name
+        self.edit("game_name", "text", self.game_name.title())
+        self.edit("download", "state", "disabled")
+
+        for name in tuple(self.widgets.keys()):
+            if name.startswith("net_name_"):
+                self.remove(name)
+
+        self["loading"].lift(self["net_name_2"])
+        self.net_name.set(0)
+        Interface.schedule(self.app.client._retrieve_net_list(self.game_id))
+
         if not self.app.client._active.is_set():
             self.show_page(self.name)
 
+    def load_nets(self, game: int, nets: list[str]):
+        if game != self.game_id:
+            return
+
+        if not nets:
+            raise ValueError("No Networks")
+
+        for index, net in enumerate(nets, start=2):
+            net_wgt = self.add(gui.tk.Radiobutton(self, text=net[1].title(), variable=self.net_name, value=net[0], command=self.set_net_var), f"net_name_{index}", row=index, column=1, pady=2)
+
+        self["loading"].lower(self["net_name_2"])
+
+    def set_net_var(self):
+        val = self.net_name.get()
+        if val:
+            self.edit("download", "state", "normal")
+
     def show(self):
-        self.edit("download", "state", "normal")
-        self.edit("download", "text", "download")
+        self.edit("download", "text", "Download")
 
     def load_game(self):
         self.parent["games"].edit("current", "state", "disabled")
         self.edit("download", "state", "disabled")
-        self.edit("download", "text", "download...")
-        print("Load Game:", self.game_name)
-        Interface.schedule(self.app.client._load_game(self.game_name))
+        self.edit("download", "text", "Download...")
+        print("Load Game:", self.game_id, self.game_name)
+        Interface.schedule(self.app.client._load_game(self.game_id, self.game_name, self.net_name.get()))
 
 class PageSetting(AppPage):
     def setup(self):
         self.add(gui.tk.Label(self, text="Settings"), row=1, column=1, pady=15)
-        self.add(gui.tk.Button(self, text="Register Account", command=lambda: webbrowser.open_new_tab(f"http://{self.app.client.net.addr}:{self.app.client.net.port + 1}/register")), row=2, column=1)
-        self.add(gui.tk.Label(self, text="None"), "server", row=3, column=1)
+        self.add(gui.tk.Button(self, text="Reconnect", command=lambda: Interface.schedule(self.app.client.net.open())), row=2, column=1)
+        self.add(gui.tk.Button(self, text="Register Account", command=lambda: webbrowser.open_new_tab(f"http://{self.app.client.net.addr}:{self.app.client.net.port + 1}/register")), row=3, column=1)
+        self.add(gui.tk.Label(self, text="None"), "server", row=4, column=1)
         self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("home")), row=99, column=1, pady=15)
 
     def show(self):
@@ -145,7 +199,6 @@ class Client:
         self.guiapp = GuiApplication(self)
         self.net = Requests(addr, 609)
         self.games = loader.GameSet()
-        self.games.names.add("dino")
 
         self._active = asyio.Nevent()
 
@@ -156,15 +209,24 @@ class Client:
         finally:
             Interface.schedule(self.net.close())
 
-    @caching.cache(1, 5)
     async def _retrieve_list(self):
         names = await self.net.retrieve_list()
+        if names is None:
+            return # Connection Lost
         self.games.names.clear()
         self.games.names.update(names)
         self.guiapp.call(self.guiapp.window["games"].update_listing)
 
-    async def _load_game(self, name):
-        if await self.net.download(name) and self.games.reload():
+    async def _retrieve_net_list(self, game: int):
+        names = await self.net.retrieve_net_list(game)
+        if names is None:
+            return self.guiapp.call(self.guiapp.window.show_page, "settings")
+        self.guiapp.call(self.guiapp.window["load_game"].load_nets, game, names)
+
+    async def _load_game(self, gid: int, name: str, net: int):
+        downloads = await Interface.gather(self.net.download(gid), self.net.download_ai(net))
+        if all(downloads) and self.games.reload():
+            self.games.set_ai(downloads[1])
             self.games.active = name
         self.guiapp.call(self.guiapp.window["games"].edit, "current", "text", f"Current: {self.games.active}")
         self.guiapp.call(self.guiapp.window["load_game"].edit, "download", "text", "Done!")
@@ -178,7 +240,9 @@ class Client:
             return
         self._active.set()
         print("Playing Game")
-        await self.guiapp.acall(game.run, self.games.get().main)
+        proc = await self.guiapp.acall(game.run_ai, self.games.get().main, self.games.ai)
+        await self.guiapp.acall(game.run_player, self.games.get().main)
+        proc.kill()
         print("Game Over")
         self._active.clear()
         self.guiapp.call(self.guiapp.window["games"].return_game)

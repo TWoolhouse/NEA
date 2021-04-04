@@ -1,9 +1,11 @@
 import os
 import caching
 import importlib
+import pickle
 from path import PATH
 
 FILE = "game.py"
+AIFILE = "ai.net"
 DIR = "games/"
 DIRP = PATH + DIR
 
@@ -19,9 +21,10 @@ def validate(module) -> bool:
 
 class GameSet:
     def __init__(self):
-        self.names = set()
+        self.names = {}
         self.active: str = None
         self._module = new()
+        self.ai = b""
         self.reload()
 
     def reload(self) -> bool:
@@ -39,13 +42,20 @@ class GameSet:
     def valid(self) -> bool:
         return self._valid
 
-def read(filename: str) -> bytes:
-    with open(DIRP+filename+"/main.py", "rb") as file:
+    def set_ai(self, data: bytes):
+        self.ai = pickle.loads(data)
+
+def read_game(filename: str) -> bytes:
+    with open(f"{DIRP}g_{filename}/main.py", "rb") as file:
         return file.read()
 
-def write(data: bytes):
-    with open(DIRP+FILE, "wb") as file:
+def write_game(data: bytes):
+    with open(f"{DIRP}{FILE}", "wb") as file:
         file.write(data)
+
+def read_ai(game: str, filename: str) -> bytes:
+    with open(f"{DIRP}g_{game}/net/{filename}", "rb") as file:
+        return file.read()
 
 @caching.cache(1)
 def find_file(name: str) -> str:

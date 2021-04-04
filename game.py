@@ -4,6 +4,7 @@ import engine
 import neural
 import collections
 import multiprocessing as mp
+from interface import Interface
 
 @enum.unique
 class AI_State(enum.IntEnum):
@@ -24,6 +25,10 @@ class GameApplication(engine.core.Program):
         app.world.systems.add(engine.layer.Data(app.world.systems.type.SCRIPT, engine.ecs.systems.Script()))
         app.world.systems.add(engine.layer.Data(app.world.systems.type.PHYSICS, engine.ecs.systems.Collider()))
 
+    def database(self, score: int):
+        if Interface.single():
+            Interface.schedule()
+
 def run(game: GameApplication, nn: neural.Network, ai_state: AI_State):
     game.AIState = ai_state
     game.AI = nn
@@ -33,9 +38,10 @@ def run(game: GameApplication, nn: neural.Network, ai_state: AI_State):
 def run_player(game: GameApplication):
     run(game, None, AI_State.PLAYER)
 
-def run_ai(game: GameApplication, ai: neural.Network):
+def run_ai(game: GameApplication, ai: neural.Network) -> mp.Process:
     proc = mp.Process(target=run, args=(game, ai, AI_State.ACTIVE))
     proc.start()
+    return proc
 
 def run_train_ai(game: GameApplication, ai: neural.Network, iterations: int):
     game.iterations = iterations

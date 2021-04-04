@@ -2,9 +2,10 @@ import game
 from games.g_dino.main import main
 
 if __name__ == "__main__":
-    import pickle
-    import neural
     import json
+    import time
+    import neural
+    import pickle
     from path import PATH
 
     GAME_PATH = f"{PATH}games/g_dino/net/"
@@ -21,14 +22,19 @@ if __name__ == "__main__":
         open(FILE, "wb").close()
         network = main.AI
 
-    algo = neural.algorithm.Genetic(network, 12, 0.5, 0.5)
+    start_time = time.time()
+    prev_time = start_time
+    algo = neural.algorithm.Genetic(network, 12, 0.8, 0.2)
     try:
         while True:
+            current_time = time.time()
+            print(round(current_time - prev_time), round(current_time - start_time))
+            prev_time = current_time
             print("Generation:", len(log_data))
             score = game.run_train(
                 main,
                 algo,
-                3, timeout=120,
+                3, timeout=150,
             )
             if score is not None:
                 log_data.append(score)

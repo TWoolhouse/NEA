@@ -1,3 +1,6 @@
+# VSCode
+.vscode
+
 # Debug Files
 test*
 old_*

@@ -10,6 +10,7 @@ class SClient(node.SClient):
     async def open(self):
         await super().open()
         self.db: db.Database = self.server.database
+        await self.send(((await self.recv("PASSWORD"))[0].data == self.server.cfg["password"]), "PASSWORD")
         print("Connection:", self._node)
 
     async def dsptch_game(self, data: node.Data):
@@ -45,6 +46,20 @@ class SClient(node.SClient):
 
     async def dsptch_database(node: 'node.DataInterface', data: node.Data):
         print("Database Request", data)
+        uid = data.data
+        gid, aid = map(int, data.tag)
+        val = (await node.recv("DATABASE_VALUE"))[0].data
+        await node.db.create_score(uid, gid, aid, val)
+
+    async def dsptch_login(node: 'node.DataInterface', data: node.Data):
+        print("Login Request", data)
+        uname = data.data
+        pwd = (await node.recv("LOGIN_PASSWORD"))[0].data
+        try:
+            uid = await node.db.login(uname, pwd)
+        except TypeError:
+            uid = 1
+        node.send(uid, "LOGIN")
 
 class CSStyle(website.Request):
     async def handle(self):
@@ -64,6 +79,29 @@ class CSStyle(website.Request):
                     await self.load_style(fname.decode())
         else:
             self.client.buffer << data
+
+class WebRegister(website.Request):
+    async def handle(self):
+        if not (uname := self.client.query.get("name", None)):
+            return self.client.buffer << website.buffer.Python(f"{website.path}web/page/register.html", self)
+
+        if (await db.Database().user_exists(uname)):
+            self._fail = "Username Already Registered"
+            return self.client.buffer << website.buffer.Python(f"{website.path}web/page/register.html", self)
+        await db.Database().register(uname, self.client.query["password"])
+        self._msg = f"Account Created! {uname}"
+        return self.client.buffer << website.buffer.Python(f"{website.path}web/page/home.html", self)
+
+class WebScoreBoard(website.Request):
+    async def handle(self):
+        return self.client.buffer << website.buffer.Python(f"{website.path}web/page/scoreboard.html", self)
+
+    async def fill(self) -> str:
+        data = ""
+        async for res in db.Database().score_list():
+            for uname, game, ai, score in res:
+                data += f"<tr><td>{uname}</td><td>{game}</td><td>{ai}</td><td>{score}</td></tr>"
+        return data
 
 class Server(node.Server):
     # Get Database Referance
@@ -89,15 +127,19 @@ class Server(node.Server):
         tree = website.Tree(
             (home := website.buffer.Python(f"{website.path}web/page/home.html")),
             home, home,
+            scoreboard=WebScoreBoard,
+            register=WebRegister,
             kill=kill,
             style=CSStyle,
         )
 
     def __init__(self):
         self.WebRequest.inst = self
-        self.web = website.Server(self.WebRequest, port=610)
+        self.cfg = website.config("server.cfg")["server"]
+        port = int(self.cfg["port"])
+        self.web = website.Server(self.WebRequest, port=port+1, ssl=port+2)
         website.buffer.Buffer.cache_disable = True # DEBUG
-        super().__init__("", 609, 10, False, SClient, echo=node.dispatch.echo)
+        super().__init__("", port, int(self.cfg["user_count"]), SClient, echo=node.dispatch.echo)
 
     async def __aenter__(self):
         await self.database.__aenter__()
@@ -117,6 +159,9 @@ async def main(repopulate=False):
         Server.database.new()
         async with Server.database:
             await Server.database.repopulate()
+            games = website.config("game.cfg", write=False)["games"]
+            for k,v in games.items():
+                await Server.database._add_games_ai((k,v), *website.config(f"../../games/g_{v}/ai.cfg", write=False)["ai"].items())
 
     server = Server()
     #  Main Serving Loop

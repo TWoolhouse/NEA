@@ -1,5 +1,6 @@
 if __name__ == "__main__":
     import sys
+    import time
     import server
     import client
     import argparse
@@ -32,7 +33,8 @@ if __name__ == "__main__":
         if args.server:
             Interface.schedule(server.main(args.repopulate))
             if args.no_client:
-                return
+                while Interface.active():
+                    time.sleep(1)
         client.main("127.0.0.1")
         Interface.stop()
 

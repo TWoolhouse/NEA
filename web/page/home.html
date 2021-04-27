@@ -14,11 +14,11 @@
 
     <h1>Welcome</h1>
     <div>
-        <p>Connection: <py>value(f"{client.peer}:{client.port}")</py></p>
-        <p>Server: <py>value(f"{client.hostname}:{client.server.https if client.ssl else client.server.http}")</py></p>
-        <p>Hi</p>
-        <!-- <p>Server: <py>value(f"{client.hostname}:{client.server.https if client.ssl else client.server.http}")</py></p> -->
+        <a href="/register">Register</a>
+        <br>
+        <a href="/scoreboard">Scoreboard</a>
     </div>
+    <p><py>value(request._msg) if "request" in globals() and hasattr(request, "_msg") else value("") </py></p>
 </body>
 
 </html>

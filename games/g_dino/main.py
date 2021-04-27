@@ -37,26 +37,20 @@ class StateManager(engine.component.Script):
             transform=engine.component.Transform(engine.Vector(GameApplication.width - 20, 20))
         )
 
-        # self._text_id = engine.render.Text(engine.app().program.id)
-        # engine.instantiate(
-        #     engine.component.Render(self._text_id, True),
-        #     parent=self.entity,
-        #     transform=engine.component.Transform(engine.Vector(GameApplication.width - 20, 44))
-        # )
+        if engine.app().program.AIState >= GameApplication.AIState.ACTIVE:
+            self._text_net_out = engine.render.Text([0, 0, 0])
+            engine.instantiate(
+                engine.component.Render(self._text_net_out, True),
+                parent=self.entity,
+                transform=engine.component.Transform(engine.Vector(GameApplication.width - 300, 50))
+            )
 
-        self._text_net_out = engine.render.Text([0, 0, 0])
-        engine.instantiate(
-            engine.component.Render(self._text_net_out, True),
-            parent=self.entity,
-            transform=engine.component.Transform(engine.Vector(GameApplication.width - 300, 50))
-        )
-
-        self._text_net = engine.render.Text("NET")
-        engine.instantiate(
-            engine.component.Render(self._text_net, True),
-            parent=self.entity,
-            transform=engine.component.Transform(engine.Vector(GameApplication.width - 300, 70))
-        )
+            self._text_net = engine.render.Text("NET")
+            engine.instantiate(
+                engine.component.Render(self._text_net, True),
+                parent=self.entity,
+                transform=engine.component.Transform(engine.Vector(GameApplication.width - 300, 70))
+            )
 
         self.state = self.GameState.RUN
 
@@ -73,6 +67,7 @@ class StateManager(engine.component.Script):
     def collide(self):
         if self.state is self.GameState.RUN and (self.score - engine.core.DeltaTime().dt() * 20) >= 1:
             self.state = self.GameState.HIT
+            engine.app().program.database(self.score)
 
     def reset(self):
         self.obstacle.reset()
@@ -263,17 +258,13 @@ class PlayerControllerInput(engine.component.Script):
 @engine.ecs.require(PlayerController)
 class PlayerControllerAI(engine.component.Script):
 
-    # HEIGHT =
-    __height = (ObstacleManager.AREA // ObstacleManager.WIDTH[1], ObstacleManager.AREA // ObstacleManager.WIDTH[0])
-
     def __init__(self, manager: StateManager):
         self.manager = manager
         # Inputs:
-        # Player - Y
         # i = range(2)
         # Obs[i] - X, Height
         self.network = Application.AI
-        # Output: Jump, Fall
+        # Output: Fall, Jump
 
         self.iteration, self.score = 0, 0
 
@@ -293,17 +284,12 @@ class PlayerControllerAI(engine.component.Script):
             engine.app().program.fitness = self.score / self.iteration
 
     def update(self):
-        # height = neural.maths.constrain(self.controller.transform.position_global[1], FLOOR, 0)
         data = [1] * 2
-        # data[1] = neural.maths.constrain(self.manager.obstacle.speed, 1, 100)
         for i in range(2):
             try:
                 child = self.manager.obstacle.children[i]
                 data[i] = neural.maths.constrain(child.transform.position[i], ObstacleManager._offset, ObstacleManager._spawn)
-                # data[2*i+1] = child.height // self.manager.obstacle.HEIGHT
             except IndexError:    pass
-                # data[i] = 1
-                # data[2*i+2] = 0
         out = self.network.feed(*data)
         self.manager._text_net_out.text = out
         self.network.result(out, self.controller.fall, self.controller.jump)
@@ -313,7 +299,7 @@ class PlayerControllerAI(engine.component.Script):
         if self.manager.state is self.manager.GameState.PAUSE:
             app = engine.app()
             if app.program.AIState is not app.program.AIState.TRAIN:
-                return
+                return app.event(engine.event.KeyPress(engine.input.Key.R))
             self.iteration += 1
             self.score += self.manager.score
             app.window.title(f"Dinosaur - {self.iteration}")

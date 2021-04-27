@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<meta charset="UTF-8">
+<html>
+
+<link rel="stylesheet" type="text/css" href="/style/dark.css">
+<!-- <link rel="stylesheet" type="text/css" href="/style/home.css"> -->
+
+<head>
+    <script>history.replaceState({}, null, "/scoreboard/")</script>
+    <title>Game Library</title>
+</head>
+
+<style>
+    table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+    th {
+        background-color: #101010;
+    }
+    td, th {
+        border: 1px solid;
+        text-align: center;
+        padding: 8px;
+    }
+
+</style>
+
+<body>
+
+    <h1>Scoreboard</h1>
+    <div>
+        <table>
+            <tr>
+                <th>Name</th>
+                <th>Game</th>
+                <th>AI</th>
+                <th>Score</th>
+            </tr>
+            <py>request.fill</py>
+        </table>
+    </div>
+</body>
+
+</html>

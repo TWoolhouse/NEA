@@ -20,11 +20,12 @@ class Database(metaclass=Singleton):
         score = await self._db.table("Score", db.Column.Foreign("uid", user), db.Column.Foreign("gid", game), db.Column.Foreign("aid", ai), db.Column("value", db.tp.INT, db.tp.NULL))
 
         # Default Users
-        await self._db().insert(user, "admin", "password")
-        # Games
-        dino_game = await self._db().insert(game, "Dino", "dino")
-        # AI
-        await self._db().insert(ai, dino_game, "Cool Robit", "ai.robit.net")
+        await self.register("annon", "annon_user_password")
+
+    async def _add_games_ai(self, game: tuple[str, str], *ai: tuple[str, str]):
+        gid = await self.create_game(*game)
+        for i in ai:
+            await self.create_ai(gid, *i)
 
     async def __aenter__(self):
         await self._db.__aenter__()
@@ -36,6 +37,9 @@ class Database(metaclass=Singleton):
         return (await self._db().select(self._db["User"], db.Condition(username, "name"), db.Condition(password, "password"), cols=["id"]))(1)[0]
     async def register(self, username: str, password: str) -> int:
         return await self._db().insert(self._db["User"], username, password)
+
+    async def user_exists(self, username: str) -> bool:
+        return (await self._db().select(self._db["User"], db.Condition(username, "name"), cols=["id"]))(1)
 
     async def game(self, id: int) -> list[str, str]:
         return (await self._db().select(self._db["Game"], id, cols=["name", "folder"]))(1)
@@ -49,10 +53,33 @@ class Database(metaclass=Singleton):
 
     async def create_game(self, name: str, folder: str) -> int:
         return await self._db().insert(self._db["Game"], name, folder)
-    async def create_ai(self, name: str, filename: str) -> int:
-        return await self._db().insert(self._db["AI"], name, filename)
+    async def create_ai(self, game: int, name: str, filename: str) -> int:
+        return await self._db().insert(self._db["AI"], game, name, filename)
     async def create_score(self, user: int, game: int, ai: int, score: int):
-        return await self._db().insert(self._db["Score"], user, game, ai, score)
+        return await self._db("score").insert(self._db["Score"], user, game, ai, score)
 
     async def ai_game(self, id: int) -> list[str, str]:
         return await self.game((await self._db().select(self._db["AI"], id, cols=["gid"]))(1)[0])
+
+    async def score_list(self, type: str="all", data=None):
+        dbi = self._db("get_score")
+        tu, tg, ta, ts = self._db["User"], self._db["Game"], self._db["AI"], self._db["Score"]
+        if type in ("user", "game", "ai"):
+            tb = {"user": tu, "game": tg, "ai": ta}
+            await dbi.select((ts, ta, tg, tu),
+                db.Condition(tb[type]["id"], data),
+                cols=(
+                        tu["name"], tg["name"], ta["name"], ts["value"]
+                ), order=(ts["value"], -1)
+            )
+        else: # All
+            await dbi.select((ts, ta, tg, tu), cols=(
+                tu["name"], tg["name"], ta["name"], ts["value"]
+            ), order=(ts["value"], -1))
+
+        SIZE = 10
+        while True:
+            res = dbi.fetch(SIZE)
+            yield res
+            if len(res) < SIZE:
+                break

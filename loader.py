@@ -24,7 +24,7 @@ class GameSet:
         self.names = {}
         self.active: str = None
         self._module = new()
-        self.ai = b""
+        self.ai = None
         self.reload()
 
     def reload(self) -> bool:

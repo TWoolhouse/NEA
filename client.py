@@ -5,15 +5,34 @@ import node
 import asyio
 import loader
 import caching
+import website
 import functools
 import webbrowser
 from interface import Interface
+from collections import namedtuple
 from typing import Callable, Any
 
 class Requests(node.Client):
     def __init__(self, addr: str, port: int):
         super().__init__(addr, port)
 
+    def is_open(func):
+        async def only_check_cache_if_open(self, *args, **kwargs):
+            if not self:
+                return None
+            return await func(self, *args, **kwargs)
+        return only_check_cache_if_open
+
+    async def open(self):
+        if not (await super().open()):
+            return False
+        cfg = website.config("client.cfg")
+        self.send(cfg["connection"]["password"], "PASSWORD")
+        if not (await self.recv("PASSWORD"))[0].data:
+            return not await self.close()
+        await self.login(cfg["user"]["name"], cfg["user"]["password"])
+
+    @is_open
     @caching.cache(1, 5)
     async def download(self, game: int):
         print("Download:", game)
@@ -24,6 +43,7 @@ class Requests(node.Client):
             return True
         return False
 
+    @is_open
     @caching.cache(1, 5)
     async def download_ai(self, ai: int) -> bytes:
         print("Download AI:", ai)
@@ -33,6 +53,7 @@ class Requests(node.Client):
             return data[0].data
         return False
 
+    @is_open
     @caching.cache(1, 5)
     async def retrieve_list(self) -> list[tuple[int, str]]:
         print("Retrieve List")
@@ -41,6 +62,7 @@ class Requests(node.Client):
         if count:
             return [i.data for i in await self.recv("GLIST", wait=count[0].data)]
 
+    @is_open
     @caching.cache(1, 15)
     async def retrieve_net_list(self, game: int) -> list[tuple[int, str]]:
         print("Retrieve AI List")
@@ -48,6 +70,17 @@ class Requests(node.Client):
         count = await self.recv("AILIST", node.Tag(game))
         if count:
             return [i.data for i in await self.recv("AILIST", node.Tag(game), wait=count[0].data)]
+
+    async def send_score(self, gid: int, aid: int, uid: int, value: int):
+        self.send(uid, "DATABASE", node.Tag(gid), node.Tag(aid))
+        await self.send(value, "DATABASE_VALUE", node.Tag(gid), node.Tag(aid), node.Tag(uid))
+
+    @is_open
+    @caching.cache(1, 30)
+    async def login(self, name: str, password: str) -> int:
+        self.send(name, "LOGIN")
+        self.send(password, "LOGIN_PASSWORD")
+        return (await self.recv("LOGIN"))[0].data
 
 class GuiApplication:
 
@@ -87,7 +120,8 @@ class PageHome(AppPage):
     def setup(self):
         self.add(gui.tk.Label(self, text="Hello and Welcome"), row=1, column=1, pady=15)
         self.add(gui.tk.Button(self, text="Games", command=lambda: self.show_page("games")), row=2, column=1)
-        self.add(gui.tk.Button(self, text="Settings", command=lambda: self.show_page("settings")), row=3, column=1)
+        self.add(gui.tk.Button(self, text="Scoreboard", command=lambda: webbrowser.open_new_tab(f"http://{self.app.client.net.addr}:{self.app.client.net.port + 1}/scoreboard")), row=3, column=1)
+        self.add(gui.tk.Button(self, text="Settings", command=lambda: self.show_page("settings")), row=4, column=1)
 
 class PageGame(AppPage):
     def setup(self):
@@ -97,6 +131,8 @@ class PageGame(AppPage):
         self.edit("current", "state", "disabled")
 
     def show(self):
+        if not self.app.client.net:
+            return self.show_page("settings")
         Interface.schedule(self.app.client._retrieve_list())
 
     def update_listing(self):
@@ -138,7 +174,6 @@ class PageLoadGame(AppPage):
     def load(self, gid: int, name: str):
         print(self.app.client.net._node)
         if not self.app.client.net:
-            print("SHOW SETTINGS")
             return self.show_page("settings")
         self.game_id = gid
         self.game_name = name
@@ -186,24 +221,40 @@ class PageLoadGame(AppPage):
 class PageSetting(AppPage):
     def setup(self):
         self.add(gui.tk.Label(self, text="Settings"), row=1, column=1, pady=15)
-        self.add(gui.tk.Button(self, text="Reconnect", command=lambda: Interface.schedule(self.app.client.net.open())), row=2, column=1)
+        self.add(gui.tk.Button(self, text="Reconnect", command=lambda: Interface.schedule(self.app.client.net.open()).add_done_callback(lambda x:self.show())), row=2, column=1)
         self.add(gui.tk.Button(self, text="Register Account", command=lambda: webbrowser.open_new_tab(f"http://{self.app.client.net.addr}:{self.app.client.net.port + 1}/register")), row=3, column=1)
-        self.add(gui.tk.Label(self, text="None"), "server", row=4, column=1)
+        self.add(gui.tk.Button(self, text="Login: USER", command=self._login), "login", row=4, column=1)
+
+        self.add(gui.tk.Label(self, text="None"), "server", row=5, column=1)
         self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("home")), row=99, column=1, pady=15)
 
     def show(self):
         self.edit("server", "text", "Server: " + (self.app.client.net.addr if self.app.client.net else "Disconnected"))
+        cfg = website.config("client.cfg")["user"]
+        self.edit("login", "text", (self.app.client.user.name if self.app.client.user.id != 1 else f"Login: {cfg['name']}"))
+
+    def _login(self):
+        if self.app.client.user.id != 1:
+            self.app.client.user = User(1, str(None))
+            return
+        Interface.schedule(self.app.client._login).add_done_callback(lambda x:self.show())
+
+User = namedtuple("User", ("id", "name"))
 
 class Client:
     def __init__(self, addr: str):
+        website.config("client.cfg", True, True)
         self.guiapp = GuiApplication(self)
         self.net = Requests(addr, 609)
         self.games = loader.GameSet()
+        self.user = User(1, str(None)) # Default User
+        game.GameApplication.callback = self._send_to_database
 
         self._active = asyio.Nevent()
 
     def main(self):
         Interface.schedule(self.net.open())
+        Interface.schedule(self._login())
         try:
             self.guiapp.main()
         finally:
@@ -228,6 +279,8 @@ class Client:
         if all(downloads) and self.games.reload():
             self.games.set_ai(downloads[1])
             self.games.active = name
+            self.games.get().main._id = gid
+            self.games.ai._id = net
         self.guiapp.call(self.guiapp.window["games"].edit, "current", "text", f"Current: {self.games.active}")
         self.guiapp.call(self.guiapp.window["load_game"].edit, "download", "text", "Done!")
         if self.games.valid():
@@ -246,6 +299,16 @@ class Client:
         print("Game Over")
         self._active.clear()
         self.guiapp.call(self.guiapp.window["games"].return_game)
+
+    async def _send_to_database(self, score: int):
+        await self.net.send_score(self.games.get().main._id, self.games.ai._id, self.user.id, score)
+
+    async def _login(self):
+        cfg = website.config("client.cfg")["user"]
+        name = cfg["name"]
+        res = await self.net.login(name, cfg["password"])
+        self.user = User(1 if res is None else res, name)
+        self.guiapp.call(lambda: self.guiapp.window["settings"].show())
 
 def main(addr: str):
     print("Client")

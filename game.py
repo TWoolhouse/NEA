@@ -18,6 +18,7 @@ class GameApplication(engine.core.Program):
     width, height = 1280, 720
     AI: neural.Network = neural.Network(neural.layout.Layout((0,),(0,),[(0,(),neural.neuron.Neuron)]))
     AIState: AI_State = AI_State.NONE
+    callback = lambda s: None
 
     def initialize(self, app: engine.core.Application):
         app.world.systems.add(engine.layer.Data(app.world.systems.type.PRE, engine.ecs.systems.FPS(10), False))
@@ -27,7 +28,7 @@ class GameApplication(engine.core.Program):
 
     def database(self, score: int):
         if Interface.single():
-            Interface.schedule()
+            Interface.schedule(self.callback, int(score))
 
 def run(game: GameApplication, nn: neural.Network, ai_state: AI_State):
     game.AIState = ai_state

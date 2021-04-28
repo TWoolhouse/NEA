@@ -126,7 +126,7 @@ class PageHome(AppPage):
 class PageGame(AppPage):
     def setup(self):
         self.add(gui.tk.Label(self, text="Games"), row=1, column=1, pady=10)
-        self.add(gui.tk.Button(self, text="Current: None", command=self.play_game), "current", row=2, column=1, pady=15)
+        self.add(gui.tk.Button(self, text="Play: None", command=self.play_game), "current", row=2, column=1, pady=15)
         self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("home")), row=99, column=1, pady=15)
         self.edit("current", "state", "disabled")
 
@@ -155,7 +155,7 @@ class PageGame(AppPage):
 
     def return_game(self):
         self.edit("current", "state", "normal")
-        self.edit("current", "text", f"Current: {self.app.client.games.active}")
+        self.edit("current", "text", f"Play: {self.app.client.games.active}")
         for name in tuple(self.widgets.keys()):
             if name.startswith("g_"):
                 self.edit(name, "state", "normal")
@@ -281,7 +281,7 @@ class Client:
             self.games.active = name
             self.games.get().main._id = gid
             self.games.ai._id = net
-        self.guiapp.call(self.guiapp.window["games"].edit, "current", "text", f"Current: {self.games.active}")
+        self.guiapp.call(self.guiapp.window["games"].edit, "current", "text", f"Play: {self.games.active}")
         self.guiapp.call(self.guiapp.window["load_game"].edit, "download", "text", "Done!")
         if self.games.valid():
             self.guiapp.call(self.guiapp.window["games"].edit, "current", "state", "normal")

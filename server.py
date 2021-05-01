@@ -49,7 +49,7 @@ class SClient(node.SClient):
         uid = data.data
         gid, aid = map(int, data.tag)
         val = (await node.recv("DATABASE_VALUE"))[0].data
-        await node.db.create_score(uid, gid, aid, val)
+        await node.db.create_score(uid, aid, val)
 
     async def dsptch_login(node: 'node.DataInterface', data: node.Data):
         print("Login Request", data)

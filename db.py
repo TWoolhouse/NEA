@@ -17,7 +17,7 @@ class Database(metaclass=Singleton):
         user = await self._db.table("User", db.Column("name", db.tp.STR, db.tp.NULL), db.Column("password", db.tp.STR, db.tp.NULL))
         game = await self._db.table("Game", db.Column("name", db.tp.STR, db.tp.NULL), db.Column("folder", db.tp.STR, db.tp.NULL))
         ai = await self._db.table("AI", db.Column.Foreign("gid", game), db.Column("name", db.tp.STR, db.tp.NULL), db.Column("filename", db.tp.STR, db.tp.NULL))
-        score = await self._db.table("Score", db.Column.Foreign("uid", user), db.Column.Foreign("gid", game), db.Column.Foreign("aid", ai), db.Column("value", db.tp.INT, db.tp.NULL))
+        score = await self._db.table("Score", db.Column.Foreign("uid", user), db.Column.Foreign("aid", ai), db.Column("value", db.tp.INT, db.tp.NULL))
 
         # Default Users
         await self.register("annon", "annon_user_password")
@@ -55,8 +55,8 @@ class Database(metaclass=Singleton):
         return await self._db().insert(self._db["Game"], name, folder)
     async def create_ai(self, game: int, name: str, filename: str) -> int:
         return await self._db().insert(self._db["AI"], game, name, filename)
-    async def create_score(self, user: int, game: int, ai: int, score: int):
-        return await self._db("score").insert(self._db["Score"], user, game, ai, score)
+    async def create_score(self, user: int, ai: int, score: int):
+        return await self._db("score").insert(self._db["Score"], user, ai, score)
 
     async def ai_game(self, id: int) -> list[str, str]:
         return await self.game((await self._db().select(self._db["AI"], id, cols=["gid"]))(1)[0])

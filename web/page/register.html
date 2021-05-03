@@ -13,8 +13,8 @@
 
     <h1>Register</h1>
     <form method="post" enctype="multipart/form-data">
-        <input type="text" name="name" required>
-        <input type="text" name="password" required>
+        <input type="text" name="name" required placeholder="Username">
+        <input type="text" name="password" required placeholder="Password">
         <button type="submit">Submit</button>
     </form>
     <p><py>value(request._fail) if hasattr(request, "_fail") else value("")</py></p>

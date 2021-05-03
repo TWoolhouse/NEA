@@ -29,6 +29,8 @@ class Requests(node.Client):
         cfg = website.config("client.cfg")
         self.send(cfg["connection"]["password"], "PASSWORD")
         if not (await self.recv("PASSWORD"))[0].data:
+            print("Password: Incorrect")
+            print("Connection Closed")
             return not await self.close()
         await self.login(cfg["user"]["name"], cfg["user"]["password"])
 
@@ -223,7 +225,7 @@ class PageSetting(AppPage):
         self.add(gui.tk.Label(self, text="Settings"), row=1, column=1, pady=15)
         self.add(gui.tk.Button(self, text="Reconnect", command=lambda: Interface.schedule(self.app.client.net.open()).add_done_callback(lambda x:self.show())), row=2, column=1)
         self.add(gui.tk.Button(self, text="Register Account", command=lambda: webbrowser.open_new_tab(f"http://{self.app.client.net.addr}:{self.app.client.net.port + 1}/register")), row=3, column=1)
-        self.add(gui.tk.Button(self, text="Login: USER", command=self._login), "login", row=4, column=1)
+        # self.add(gui.tk.Button(self, text="Login: USER", command=self._login), "login", row=4, column=1)
 
         self.add(gui.tk.Label(self, text="None"), "server", row=5, column=1)
         self.add(gui.tk.Button(self, text="Return", command=lambda: self.show_page("home")), row=99, column=1, pady=15)
@@ -231,7 +233,7 @@ class PageSetting(AppPage):
     def show(self):
         self.edit("server", "text", "Server: " + (self.app.client.net.addr if self.app.client.net else "Disconnected"))
         cfg = website.config("client.cfg")["user"]
-        self.edit("login", "text", (self.app.client.user.name if self.app.client.user.id != 1 else f"Login: {cfg['name']}"))
+        # self.edit("login", "text", (self.app.client.user.name if self.app.client.user.id != 1 else f"Login: {cfg['name']}"))
 
     def _login(self):
         if self.app.client.user.id != 1:
